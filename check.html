@@ -4,7 +4,7 @@
 		<link rel="stylesheet" href="./speedtest.css?ver=1" />
 		<meta charset="utf8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>VDON Speed Test</title>
+		<title>VDON Stream Test</title>
 		<style>
 			.fullscreen { 
 				width:100%;
@@ -66,36 +66,60 @@
 			<h1>
 				Welcome
 			</h1>
+			<br />
 			<h2>
 				This application will access your camera and complete a video test stream.
 				<br />
 				
 				<br />
-				The test will take a few minutes to complete.<br />
-				<button onclick="next1();">Continue</button>⭐⭐⭐
+				The full test will take a few minutes to complete.<br />
+				<button onclick="next1();">Continue</button>⭐⭐⭐⭐
 				
 			</h2>
 		</div>
 		<div class="fullscreen hidden" id="page2">
-			
+			<h1>
+				Please note, for best results:<br />
+			</h1>
+			<br />
 			<h2>
-				Please note, for best results:<br /><br />
+				
 				<li>Connect your computer to a wired connection, instead of Wi-Fi</li><br />
 				<li>Have no other applications open while running this test</li><br />
 				<li>If using a laptop, connect your laptop to a power outlet</li><br />
-				🌠<button onclick="next2();">Continue</button>⭐⭐
+				🌠<button onclick="next2();">Continue</button>⭐⭐⭐
 				
 			</h2>
 		</div>
+		
+		<div class="fullscreen hidden" id="page2a">
+			
+			<h1>
+				This first step will measure your network bandwidth<br />
+			</h1>
+			<br />
+			<h2>
+				We will test against Cloudflare's speed test servers.<br /><br />
+				It will take a minute to complete once started.<br />
+				
+				<br />
+				<div id="cloudflareresults">
+					🌠🌠<button id="cloudflare" disabled>Loading Files</button>⭐⭐
+				</div>
+				
+			</h2>
+		</div>
+		
 		<div class="fullscreen hidden" id="page3">
 			
 			<h2>
 				The next step will access your camera and microphone.<br /><br />
 				<br />
-				Accept the camera and microphone permissions if prompted.
+				Accept the camera and microphone permissions if prompted.<br /><br />
+				<small><i>No one will be able to see your video or audio, other than you.</i></small>
 				<br /><br />
 				<img src='./media/accept.png'/><br />
-				🌠🌠<button onclick="next3();">Continue</button>⭐
+				🌠🌠🌠<button onclick="next3();">Continue</button>⭐
 				
 			</h2>
 		</div>
@@ -152,13 +176,9 @@
 
 		<script>
 		
-			function getChromeVersion() {
+			function getChromiumVersion() {
 				var raw = navigator.userAgent.match(/Chrom(e|ium)\/([0-9]+)\./);
 				return raw ? parseInt(raw[2], 10) : false;
-			}
-			
-			if (!getChromeVersion()){
-				alert("This speedtest is optimized for Chromium-based browsers; graphs will not work for Firefox or Safari browsers.");
 			}
 			
 			function next1(){
@@ -168,14 +188,23 @@
 			
 			function next2(){
 				document.getElementById("page2").classList.add("hidden");
+				document.getElementById("page2a").classList.remove("hidden");
+				setTimeout(function(){
+					if (document.getElementById("playButton") && !document.getElementById("playButton").skip){
+						next2a();
+					}
+				},10000);
+			}
+			
+			function next2a(){
+				document.getElementById("page2a").classList.add("hidden");
 				document.getElementById("page3").classList.remove("hidden");
-				loadIframe();
 			}
 			
 			function next3(){
 				document.getElementById("page3").classList.add("hidden");
 				document.getElementById("mainapp").classList.remove("hidden");
-				loadIframe();
+				loadIframe(region);
 			}
 		
 			(function (w) {
@@ -241,6 +270,52 @@
 			function logData(data) {
 				logged.push(data);
 			}
+			
+			const stunServers = [
+			  'stun:stun.l.google.com:19302',
+			  'stun:stun1.l.google.com:19302',
+			  'stun:stun.cloudflare.com:3478',
+			];
+
+			async function checkConnectionModes() {
+			  let hostMode = false;
+			  let srflxMode = false;
+
+			  const iceConfig = { iceServers: [{ urls: stunServers }] };
+			  const rtcPeerConnection = new RTCPeerConnection(iceConfig);
+
+			  rtcPeerConnection.createDataChannel(''); // Create a dummy data channel
+			  const offer = await rtcPeerConnection.createOffer();
+
+			  rtcPeerConnection.onicecandidate = (event) => {
+				if (event.candidate) {
+				  if (event.candidate.candidate.includes('srflx')) {
+					if (!srflxMode){
+						srflxMode= true;
+						if (hostMode){
+							logged.push({hostMode,srflxMode});
+						}
+					}
+				  } else if (event.candidate.candidate.includes('host')) {
+					if (!hostMode){
+						hostMode = true;
+						if (srflxMode){
+							logged.push({hostMode,srflxMode});
+						}
+					}
+				  }
+				} else {
+				  rtcPeerConnection.onicecandidate = null;
+				  if (!hostMode || !hostMode){
+					logged.push({hostMode,srflxMode});
+				  }
+				}
+			  };
+			  rtcPeerConnection.setLocalDescription(offer);
+			}
+			try {
+				checkConnectionModes();
+			} catch(e){}
 		
 			function reloadTurn(){
 				console.log("Reloading to change TURN servers");
@@ -285,8 +360,6 @@
 			var statsSent = false;
 
 			eventer(messageEvent, function (e) {
-			
-				console.log(e.data);
 				if ("action" in e.data) {
 				
 					if (e.data.action == "available-speedtest-servers"){
@@ -309,6 +382,12 @@
 							"#controls button:last-child"
 						)[0].style.display = "inline";
 						
+						
+						logData({"timestart": Date.now()});
+						
+						try {
+							logData({"peakhour": new Date(Date.now()).getHours()>7 && new Date(Date.now()).getHours()<11});
+						} catch(e){}
 						
 						var showdetails = document.createElement("button");
 						showdetails.onclick = function(){
@@ -346,61 +425,75 @@
 				if ("stats" in e.data) {
 					var out = "";
 					
-					for (var streamID in e.data.stats.inbound_stats) {
-						out += printValues(e.data.stats.inbound_stats[streamID]);
-						if (e.data.stats.inbound_stats[streamID]){
+					
+					for (var someValue in e.data.stats.inbound) {
+						out += printValues(e.data.stats.inbound[someValue]);
+						if (e.data.stats.inbound[someValue] && e.data.stats.inbound[someValue].info){
 							if (!statsSent){
-								statsSent = e.data.stats.inbound_stats[streamID];
+								statsSent = e.data.stats.inbound[someValue];
 							}
 						}
 					}
 					
-					for (var streamID in e.data.stats.outbound_stats) {
-						if (e.data.stats.outbound_stats[streamID].quality_limitation_reason){
-							if (quality_reason != e.data.stats.outbound_stats[streamID].quality_limitation_reason) {
-								quality_reason = e.data.stats.outbound_stats[streamID].quality_limitation_reason;
+					for (var someValue in e.data.stats.outbound) {
+						if (e.data.stats.outbound[someValue].quality_limitation_reason){
+							if (quality_reason != e.data.stats.outbound[someValue].quality_limitation_reason) {
+								quality_reason = e.data.stats.outbound[someValue].quality_limitation_reason;
 								logData({"QLR": quality_reason});
 							}
 						}
 						
-						if (e.data.stats.outbound_stats[streamID].encoder){
-							if (encoder != e.data.stats.outbound_stats[streamID].encoder) {
-								encoder = e.data.stats.outbound_stats[streamID].encoder;
+						if (e.data.stats.outbound[someValue].encoder){
+							if (encoder != e.data.stats.outbound[someValue].encoder) {
+								encoder = e.data.stats.outbound[someValue].encoder;
+								logData({"encoder":encoder});
+							}
+						} else if (e.data.stats.outbound[someValue].video_codec){
+							if (encoder != e.data.stats.outbound[someValue].video_codec) {
+								encoder = e.data.stats.outbound[someValue].video_codec;
 								logData({"encoder":encoder});
 							}
 						}
 					}
 
-					if (out.split("Bitrate_in_kbps").length > 1) {
-						for (var key in e.data.stats.inbound_stats[streamID]) {
-							if (key.startsWith("RTCMediaStreamTrack_receiver")) {
-								var bitrate = e.data.stats.inbound_stats[streamID][key][
-										"Bitrate_in_kbps"
-									];
+					for (var key in e.data.stats.inbound[streamID]){
+						if (typeof e.data.stats.inbound[streamID][key] == "object"){
+							if ("Bitrate_in_kbps" in e.data.stats.inbound[streamID][key]){
+								var bitrate = e.data.stats.inbound[streamID][key]["Bitrate_in_kbps"];
 								updateData("bitrate", bitrate);
-
-								var buffer = e.data.stats.inbound_stats[streamID][key][
-										"Buffer_Delay_in_ms"
-									];
+							}
+							
+							if ("Jitter_Buffer_ms" in e.data.stats.inbound[streamID][key]){
+								var buffer = e.data.stats.inbound[streamID][key]["Jitter_Buffer_ms"];
 								updateData("buffer", buffer);
-
-								var packetloss = e.data.stats.inbound_stats[streamID][key]["packetLoss_in_percentage"];
+							} else if ("Buffer_Delay_in_ms" in e.data.stats.inbound[streamID][key]){
+								var buffer = e.data.stats.inbound[streamID][key]["Buffer_Delay_in_ms"];
+								updateData("buffer", buffer);
+							} else if ("Added_Buffer_Delay_ms" in e.data.stats.inbound[streamID][key]){
+								console.log("Added_Buffer_Delay_ms");
+								var buffer = e.data.stats.inbound[streamID][key]["Added_Buffer_Delay_ms"];
+								updateData("buffer", buffer);
+							}
+							
+							if ("packetLoss_in_percentage" in e.data.stats.inbound[streamID][key]){
+								var packetloss = e.data.stats.inbound[streamID][key]["packetLoss_in_percentage"];
 								if (packetloss != undefined) {
 									packetloss = packetloss.toFixed(2);
 									updateData("packetloss", packetloss);
 								}
+							}
 
-								var resolution = e.data.stats.inbound_stats[streamID][key]["Resolution"];
+							if ("Resolution" in e.data.stats.inbound[streamID][key]){
+								var resolution = e.data.stats.inbound[streamID][key]["Resolution"];
 
 								if (previousResolution != resolution) {
 									previousResolution = resolution;
 									logData({"resolution": resolution});
 								}
 							}
+							
 						}
-
 					}
-					
 				}
 			});
 
@@ -414,7 +507,33 @@
 			
 			if (urlParams.has("sid")) {
 				streamID = urlParams.get("sid");
+			} else if (urlParams.has("push")) {
+				streamID = urlParams.get("push");
 			}
+			
+			var region = "";
+			if (urlParams.has("location")) {
+				region = urlParams.get("location");
+			} else if (urlParams.has("region")) {
+				region = urlParams.get("region");
+			}
+			
+			<!-- <option selected value="">Automatic</option> -->
+			<!-- <option value="de1">Saarbruecken, Germany</option> -->
+			<!-- <option value="de2">Frankfurt, Germany</option> -->
+			<!-- <option value="fr1">Strasbourg, France</option> -->
+			<!-- <option value="bra1">São Paulo, Brazil</option> -->
+			<!-- <option value="pol1">Warsaw, Poland</option> -->
+			<!-- <option value="cae1">Montreal, Canada</option> -->
+			<!-- <option value="use1">Virgina, USA</option> -->
+			<!-- <option disabled value="usc1">Chicago, USA</option> -->
+			<!-- <option disabled value="usw1">Los Angeles, USA</option> -->
+			<!-- <option value="usw2">Oregon, USA</option> -->
+			<!-- <option value="aus1">Sydney, Australia</option> -->
+			<!-- <option value="jap1">Tokyo, Japan</option> -->
+			<!-- <option value="sing1">Singapore</option> -->
+			<!-- <option value="ind1">Mumbai, India</option> -->
+			<!-- <option value="pol1">Warsaw, Poland</option> -->
 
 			var iframe1 = document.createElement("iframe");
 			
@@ -431,7 +550,7 @@
 				iframe1.allowfullscreen ="true";
 
 				//iframe.allow = "autoplay";
-				var srcString =	"./?push=" + streamID + "&cleanoutput&privacy&"+testType+"&audiodevice=1&fullscreen&transparent&remote&maxbandwidth&speedtest="+zone;
+				var srcString =	"./index.html?push=" + streamID + "&cleanoutput&privacy&"+testType+"&audiodevice=1&fullscreen&transparent&remote&maxbandwidth&speedtest="+zone;
 				
 				if (urlParams.has("turn")) {
 					srcString = srcString + "&turn=" + urlParams.get("turn");
@@ -484,7 +603,7 @@
 				var iframeContainer = document.createElement("span");
 
 				iframe.allow = "autoplay";
-				var srcString = "./?view=" + streamID + "&cleanoutput&privacy&noaudio&transparent&bitrate=6000&scale=100&speedtest="+zone; // No TURN servers set on the reciever. Don't want to query for TURN servers needlessly.
+				var srcString = "./index.html?view=" + streamID + "&cleanoutput&privacy&noaudio&transparent&bitrate=6000&scale=100&speedtest="+zone; // No TURN servers set on the reciever. Don't want to query for TURN servers needlessly.
 
 				if (urlParams.has("turn")) {
 					srcString = srcString + "&turn=" + urlParams.get("turn");
@@ -496,6 +615,8 @@
 				
 				if (urlParams.has("id")) {
 					recordResults = urlParams.get("id") || false;
+				} else if (urlParams.has("session")) {
+					recordResults = urlParams.get("session") || false;
 				}
 
 				iframe.src = srcString;
@@ -567,6 +688,22 @@
 						return;
 					}
 					
+					if (timer == 0){
+						iframe.contentWindow.postMessage({ bitrate: 2500 }, "*");
+						bitrate.target = 2500;
+						updateData("target", bitrate.target);
+					}
+					if (timer == 30){
+						iframe.contentWindow.postMessage({ bitrate: 4000 }, "*");
+						bitrate.target = 4000;
+						updateData("target", bitrate.target);
+					}
+					if (timer == 60){
+						iframe.contentWindow.postMessage({ bitrate: 6000 }, "*");
+						bitrate.target = 6000;
+						updateData("target", bitrate.target);
+					}
+					
 					if (timer!==null){
 						timer+=1
 						div.innerHTML = "Test completes in "+(90-timer)+" seconds";
@@ -582,17 +719,17 @@
 			}
 
 		
-			var testType= "webcam&quality=-1&css=speedtest.css";
+			var testType= "webcam&quality=0&css=speedtest.css";
 			if (urlParams.has("screen") || urlParams.has("ss") || urlParams.has("screenshare") || urlParams.has("screentest")) {
-				document.getElementById("screen").innerHTML = '<a href="./speedtest" style="color: #CCC;">Test webcam-streaming performance here</a>';
+				document.getElementById("screen").innerHTML = '<a href="./speedtest.html" style="color: #CCC;">Test webcam-streaming performance here</a>';
 				testType = "quality=0&screenshare&css=speedtest.css"
 			}
 			
 			var bitrate = {
 				element: "bitrate-graph",
 				data: 0,
-				max: 6000,
-				target: 3000,
+				max: 6500,
+				target: 2500,
 			};
 			var frames;
 			var buffer = {
@@ -654,13 +791,28 @@
 				var offset = borderWidth * 2;
 
 				// Create gradient
+				
 				var grd = context.createLinearGradient(0, 0, 0, height);
-
+				
 				if (type == "bitrate") {
-					// Higher values are green
-					grd.addColorStop(0, "#33C433");
-					grd.addColorStop(0.7, "#F3F304");
-					grd.addColorStop(0.9, "#F30404");
+					
+					if (stat.target == 2500){
+						grd.addColorStop(0, "#33C433");
+						grd.addColorStop(0.7, "#33C433");
+						grd.addColorStop(0.8, "#F3F304");
+						grd.addColorStop(0.92, "#F30404");
+					} else if (stat.target == 4000){
+						grd.addColorStop(0, "#33C433");
+						grd.addColorStop(0.5, "#33C433");
+						grd.addColorStop(0.8, "#F3F304");
+						grd.addColorStop(0.92, "#F30404");
+					} else if (stat.target == 6000){
+						grd.addColorStop(0, "#33C433");
+						grd.addColorStop(0.3, "#33C433");
+						grd.addColorStop(0.8, "#F3F304");
+						grd.addColorStop(0.92, "#F30404");
+					}
+					
 				} else {
 					// Higher values are red
 					grd.addColorStop(0, "#F30404");
@@ -673,10 +825,10 @@
 				//context.fillStyle = "#009933";
 				//context.imageSmoothingEnabled = true;
 
-				yScale = height / stat.target;
+				yScale = height / stat.max;
 
-				if (stat.data > stat.target) {
-					stat.data = stat.target;
+				if (stat.data > stat.max) {
+					stat.data = stat.max;
 				}
 
 				if (type == "packetloss" && stat.data == 0.0) {
@@ -696,6 +848,46 @@
 				// now clear the right-most pixels:
 				context.clearRect(width - 1, 0, 1, height);
 			}
+			
+			
+			
+		</script>
+	
+		<script type="module">
+			import SpeedTest from 'https://cdn.skypack.dev/@cloudflare/speedtest';
+
+			const controlEl = document.getElementById('controls');
+			const playButton = document.getElementById("cloudflare");
+			
+			const resultsCl = document.getElementById("cloudflareresults");
+			
+			var Runstate = false;
+			const engine = new SpeedTest({
+			  autoStart: false
+			});
+			engine.onRunningChange = (running) => {playButton.textContent = running ? 'Running...' : 'Finished!';Runstate=running;}
+			engine.onResultsChange = ({ type }) => {
+			   console.log(type);
+			   if (Runstate){
+				console.log(engine.results.raw);
+			   }
+			   resultsCl.style.color = "green";
+			   resultsCl.innerHTML = Runstate ? '<b>Please wait</b><br .><br .>Testing in progress: '+type : 'Finished!';
+			};
+			
+			engine.onFinish = results => {
+			  console.log(results.getSummary());
+			  console.log(results.getScores());
+			  logData({['summary']: results.getSummary()});
+			  logData({['scores']: results.getScores()});
+			  next2a();
+			};
+			playButton.skip=true;
+			playButton.textContent = "Start test";
+			playButton.disabled = null;
+	
+			playButton.onclick = function(){playButton.disabled=true;playButton.onclick=null;engine.play();}
+
 		</script>
 	</body>
 </html>
